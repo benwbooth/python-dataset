@@ -185,7 +185,7 @@ class Table(object):
             if singular is not False and singular in self.frame.columns:
                 raise Exception("Ambiguous field access: singular form \"{}\" and plural form \"{}\" both exist as columns".format(singular, name))
             return self.get_one(name)
-        if singular in self.frame.columns:
+        if singular is not False and singular in self.frame.columns:
             return self.get_all(singular)
         return getattr(self.frame, name)
 
@@ -199,7 +199,9 @@ class Table(object):
             if singular is not False and singular in self.frame.columns:
                 raise Exception("Ambiguous field access: singular form \"{}\" and plural form \"{}\" both exist as columns".format(singular, name))
             return self.get_one(name)
-        return self.get_all(singular)
+        if singular is not False and singular in self.frame.columns:
+            return self.get_all(singular)
+        return self.frame.__getitem__(name)
 
     def set_one(self, name, value):
         self.one()
@@ -210,9 +212,11 @@ class Table(object):
 
     def __setattr__(self, name, value):
         singular = Table.inflect_engine.singular_noun(name)
-        if not hasattr(self, name) and (name in self.frame.columns or (singular is not False and singular in self.frame.columns)):
-            return self.__setitem__(name, value)
-        return self.frame.__setitem__(name, value)
+        if name in self.frame.columns:
+            return self.set_one(name, value)
+        if singular is not False and singular in self.frame.columns:
+            return self.set_all(singular, value)
+        return self.frame.__setattr__(name, value)
 
     def __setitem__(self, name, value):
         if isinstance(name, int):
@@ -224,7 +228,9 @@ class Table(object):
             if singular is not False and singular in self.frame.columns:
                 raise Exception("Ambiguous field update: singular form \"{}\" and plural form \"{}\" both exist as columns".format(singular, name))
             return self.set_one(name, value)
-        return self.set_all(singular, value)
+        if singular is not False and singular in self.frame.columns:
+            return self.set_all(singular, value)
+        return self.frame.__setitem__(name, value)
 
     class Iter(object):
         def __init__(self, table):
@@ -237,6 +243,7 @@ class Table(object):
                 self.i += 1
                 return self.table.frame[(self.i-1):self.i]
             raise StopIteration
+        next = __next__
         
     def __iter__(self):
         return Table.Iter(self)
