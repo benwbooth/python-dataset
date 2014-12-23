@@ -1,9 +1,9 @@
-import io
+import io, sys
 import sqlalchemy, pandas, pandas.io.sql, pandas.core.format, pandas.core.common, inflect, tabulate
 
 class CopyCsv(object):
     def __init__(self, df, **kwargs):
-        self.buffer = io.StringIO()
+        self.buffer = io.BytesIO() if sys.version_info[0] < 3 else io.StringIO()
         self.csv = pandas.core.format.CSVFormatter(df, self.buffer, **kwargs)
         self.csv.writer = pandas.core.common.UnicodeWriter(self.buffer, encoding='utf8')
         self.nrows = len(self.csv.data_index)
@@ -21,9 +21,20 @@ class CopyCsv(object):
         s = self.buffer.getvalue()
         self.buffer.truncate(0)
         self.buffer.seek(0)
-        return s
+        return unicode(s) if sys.version_info[0] < 3 else s
 
-def pg_query(engine, sql, *args, index=False, index_col=None, coerce_float=True, parse_dates=None, params=None, chunksize=None, schema='pg_temp', if_exists='fail', keep=False, create=True, **dfs):
+def pg_query(engine, sql, *args, **kwargs):
+    index = kwargs.pop('index', False)
+    index_col = kwargs.pop('index_col', None)
+    coerce_float = kwargs.pop('coerce_float', True)
+    parse_dates = kwargs.pop('parse_dates', None)
+    params = kwargs.pop('params', None)
+    chunksize = kwargs.pop('chunksize', None)
+    schema = kwargs.pop('schema', 'pg_temp')
+    if_exists = kwargs.pop('if_exists', 'fail')
+    keep = kwargs.pop('keep', False)
+    create = kwargs.pop('create', True)
+    dfs = kwargs
     # set up variables
     connection = engine.connect()
     cursor = connection.connection.cursor()
@@ -68,7 +79,18 @@ def pg_query(engine, sql, *args, index=False, index_col=None, coerce_float=True,
                 if engine.has_table(name, schema):
                     engine.drop_table(name, schema)
 
-def sql_query(engine, sql, *args, index=False, index_col=None, coerce_float=True, parse_dates=None, params=None, chunksize=None, schema=None, if_exists='fail', keep=False, create=True, **dfs):
+def sql_query(engine, sql, *args, **kwargs):
+    index = kwargs.pop('index', False)
+    index_col = kwargs.pop('index_col', None)
+    coerce_float = kwargs.pop('coerce_float', True)
+    parse_dates = kwargs.pop('parse_dates', None)
+    params = kwargs.pop('params', None)
+    chunksize = kwargs.pop('chunksize', None)
+    schema = kwargs.pop('schema', None)
+    if_exists = kwargs.pop('if_exists', 'fail')
+    keep = kwargs.pop('keep', False)
+    create = kwargs.pop('keep', True)
+    dfs = kwargs
     # set up variables
     args = list(args)
     # process extra arguments: dicts are data frames, lists/tuples are params
@@ -111,7 +133,8 @@ def insert(engine, *args, **kwargs):
 
 class Frame(pandas.DataFrame):
     _metadata = ['name']
-    def __init__(self, cls, *args, name=None, **kwargs):
+    def __init__(self, cls, *args, **kwargs):
+        name = kwargs.pop('name', None)
         super(Frame, self).__init__(*args, **kwargs)
         object.__setattr__(self, 'cls', cls)
         object.__setattr__(self, 'name', name)
@@ -121,7 +144,6 @@ class Frame(pandas.DataFrame):
         return self.cls
 
     def __finalize__(self, other, method=None, **kwargs):
-        print("in finalize")
         for name in self._metadata:
             object.frame.__setattr__(self, name, getattr(other.frame, name, None))
         return None
@@ -228,7 +250,6 @@ class Table(object):
             tablefmt=Table.tablefmt)
 
     def __finalize__(self, other, method=None, **kwargs):
-        print("in finalize")
         for name in self._metadata:
             object.frame.__setattr__(self, name, getattr(other.frame, name, None))
         return None

@@ -1,7 +1,7 @@
 from setuptools import setup
 
 setup(name='dataset',
-      version='0.1',
+      version='0.2',
       description='sqldf-like ORM for python and PostgreSQL',
       url='https://github.com/benwbooth/python-dataset',
       author='Ben Booth',
