@@ -54,18 +54,14 @@ def pg_query(engine, sql, *args, **kwargs):
                 raise Exception("Dataframe given with no name: {}".format(arg))
         else:
             raise Exception("Invalid argument: {}".format(arg))
-    # remove temp files before importing the temp tables to avoid name clashes
-    if len(dfs)>0 and schema=='pg_temp': connection.execute("discard temp")
-    # load the data frames into temp tables
+    # load the data frames into tables
     try:
         for name, df in dfs.items():
-            # create the table if it's a temp table
+            if schema != 'pg_temp' and not create and not engine.has_table(name, schema):
+                raise Exception("Table {} does not exist!".format(name if schema is None else '.'.join([schema,name])))
+            # create the table
             table = pandas.io.sql.SQLTable(name, engine, frame=df, schema=schema, if_exists=if_exists, index=index)
-            if schema == 'pg_temp': connection.execute(table.sql_schema())
-            else:
-                if not create and not engine.has_table(name, schema):
-                    raise Exception("Table {} does not exist!".format(name if schema is None else '.'.join([schema,name])))
-                table.create()
+            connection.execute(table.sql_schema())
             # load the data into the table
             copycsv = CopyCsv(df, index=index)
             cursor.copy_expert('copy {} {} from stdout csv'.format(
@@ -74,10 +70,11 @@ def pg_query(engine, sql, *args, **kwargs):
         # run the query and return the results as a data frame
         return db.read_query(sql, index_col=index_col, coerce_float=coerce_float, parse_dates=parse_dates, params=params, chunksize=chunksize) if sql is not None else None
     finally:
-        if not keep and schema != 'pg_temp':
+        if not keep:
             for name, df in dfs.items():
-                if engine.has_table(name, schema):
-                    engine.drop_table(name, schema)
+                table = pandas.io.sql.SQLTable(name, engine, frame=df, schema=schema, if_exists=if_exists, index=index)
+                table.table.drop(connection)
+
 
 def sql_query(engine, sql, *args, **kwargs):
     index = kwargs.pop('index', False)
@@ -93,6 +90,8 @@ def sql_query(engine, sql, *args, **kwargs):
     dfs = kwargs
     # set up variables
     args = list(args)
+    connection = engine.connect()
+    db = pandas.io.sql.SQLDatabase(connection)
     # process extra arguments: dicts are data frames, lists/tuples are params
     for arg in args:
         if isinstance(arg, dict):
@@ -120,8 +119,8 @@ def sql_query(engine, sql, *args, **kwargs):
     finally:
         if not keep:
             for name, df in dfs.items():
-                if engine.has_table(name, schema):
-                    engine.drop_table(name, schema)
+                table = pandas.io.sql.SQLTable(name, engine, frame=df, schema=schema, if_exists=if_exists, index=index)
+                table.table.drop(connection)
 
 def query(engine, *args, **kwargs):
     if engine.dialect.name == 'postgresql':
@@ -288,5 +287,8 @@ def table(*args, **kwargs):
 if __name__ == '__main__':
     engine = sqlalchemy.create_engine("postgresql://eel/labtrack")
     df = pandas.DataFrame([{'a': 1, 'b': 2}])
-    repr(table()(engine, "select * from df", df=df))
+    print(repr(table()(engine, "select * from df", df=df)))
+    print(repr(table()(engine, "select * from df", df=df)))
+    print(repr(table()(engine, "select * from df", df=df)))
+    print(repr(table()(engine, "select * from df", df=df)))
     
