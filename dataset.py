@@ -61,7 +61,7 @@ def pg_query(engine, sql, *args, **kwargs):
                 raise Exception("Table {} does not exist!".format(name if schema is None else '.'.join([schema,name])))
             # create the table
             table = pandas.io.sql.SQLTable(name, engine, frame=df, schema=schema, if_exists=if_exists, index=index)
-            connection.execute(table.sql_schema())
+            table.table.create(connection)
             # load the data into the table
             copycsv = CopyCsv(df, index=index)
             cursor.copy_expert('copy {} {} from stdout csv'.format(
